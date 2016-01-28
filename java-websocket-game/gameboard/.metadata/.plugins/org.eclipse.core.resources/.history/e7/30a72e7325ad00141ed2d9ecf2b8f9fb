@@ -1,0 +1,75 @@
+package network.extensions;
+/* 
+ * Base64 Encoder sourced from http://en.wikibooks.org/wiki/Algorithm_Implementation/Miscellaneous/Base64#Java
+ * FALL BACK FUNCTION FOR >JAVA 1.5
+ */
+class Base64Encode {
+    private final static String base64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+ 
+    public static String encode(String s) {
+ 
+	// the result/encoded string, the padding string, and the pad count
+	String r = "", p = "";
+	int c = s.length() % 3;
+ 
+	// add a right zero pad to make this string a multiple of 3 characters
+	if (c > 0) {
+	    for (; c < 3; c++) {
+		p += "=";
+		s += "\0";
+	    }
+	}
+ 
+	// increment over the length of the string, three characters at a time
+	for (c = 0; c < s.length(); c += 3) {
+ 
+	    // we add newlines after every 76 output characters, according to
+	    // the MIME specs
+	    if (c > 0 && (c / 3 * 4) % 76 == 0)
+		r += "\r\n";
+ 
+	    // these three 8-bit (ASCII) characters become one 24-bit number
+	    int n = (s.charAt(c) << 16) + (s.charAt(c + 1) << 8)
+		    + (s.charAt(c + 2));
+ 
+	    // this 24-bit number gets separated into four 6-bit numbers
+	    int n1 = (n >> 18) & 63, n2 = (n >> 12) & 63, n3 = (n >> 6) & 63, n4 = n & 63;
+ 
+	    // those four 6-bit numbers are used as indices into the base64
+	    // character list
+	    r += "" + base64chars.charAt(n1) + base64chars.charAt(n2)
+		    + base64chars.charAt(n3) + base64chars.charAt(n4);
+	}
+ 
+	return r.substring(0, r.length() - p.length()) + p;
+    }
+    
+    public static String encode(byte[] s) {
+    	int remainder = s.length % 3;
+    	String output = "";
+    	String padding = "";
+    	
+    	//if uneven, pad right with zero (not implemented)
+    	System.out.println("non-3byte warning");
+    	if(remainder > 0) {
+    		for(int x=0; x < remainder; x++) {
+    			padding += "=";
+    		}
+    	}
+    	
+    	for(int c = 0; c < s.length; c+= 3) {
+    		if(remainder > 0 && (c / 3 * 4) % 76 ==0) {
+    			output += "\r\n";
+    		}
+    		//bitshift left first then back to right
+    		// visualize using http://www.herongyang.com/encoding/Base64-Encoding-Algorithm.html
+    		int charVal1 = (s[c] >> 2) << 2;
+    		int charVal2 = (s[c] << 6) + ((s[c+1] >> 2) << 2);
+    		int charVal3 = (s[c+1] << 6) + ((s[c+2] >> 2) << 2);
+    		int charVal4 = (s[c] << 2) >> 2;
+    		output += base64chars.charAt(charVal1) + base64chars.charAt(charVal2) + base64chars.charAt(charVal3) + base64chars.charAt(charVal4);
+    		
+    	}
+    	return output;
+    }
+}

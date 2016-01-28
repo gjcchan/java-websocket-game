@@ -1,0 +1,68 @@
+package core;
+
+import java.io.IOException;
+
+import objects.client;
+import network.connectedTCP;
+import network.extensions.WebSocket;
+import data.global;
+
+public class netBroadcaster implements Runnable {
+	private global worldData;
+	private boolean terminated;
+	public final static int sleepTime = 100; //ms
+	
+	public netBroadcaster(global data) {
+		worldData = data;
+	}
+	
+	public void run() {
+		long start;
+		String msg;
+		terminated = false;
+		while(!terminated) {
+			start = System.nanoTime();
+			msg = "{\"players\":[";
+			for(client x : worldData.player.values()) {
+				msg += "{ \"x\":" + x.x
+					+ ", \"z\":" + x.z
+					+ ", \"rotX\":" + x.rotationX
+					+ "},";
+			}
+			//remove last comma
+			msg = msg.substring(0,msg.length()-1);
+			msg += "]}";
+			broadcast(WebSocket.createPacket( msg.getBytes() ));
+			//System.out.println(msg);
+			try {
+				Thread.sleep(sleepTime - (System.nanoTime() - start) / 1000000);
+			} catch (InterruptedException e) {
+				//ServerLog.write("WORLD SIMULATION: no time to sleep: wait < 0");
+			} catch(IllegalArgumentException ex) {
+				//ServerLog.write("gamestate THREAD: CPU too slow");	
+			}
+		}
+		
+	}
+	public void halt() {
+		terminated = true;
+	}
+	
+	public void broadcast(byte[] data) {
+	
+		try {
+			for(connectedTCP x : worldData.sessions.values()) {
+				try {
+					x.send(data);
+				} catch (IOException e) {
+					worldData.player.remove(x.IP());
+					x.halt();
+					x.close();
+					worldData.sessions.remove(x);			
+				}
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
+}

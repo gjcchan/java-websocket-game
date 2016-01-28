@@ -1,0 +1,206 @@
+package data;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+
+public class gameWorld {
+	
+	public static final int _L = 0;
+	public static final int _R = 1;
+	public static final int _U = 2;
+	public static final int _D = 3;
+	
+	public static final int _LU = 4;
+	public static final int _LR = 5;
+	public static final int _LD = 6;
+	
+	public static final int _RU = 7;
+	public static final int _RD = 8;
+	
+	public static final int _UD = 9;
+	
+	public static final int _LRU = 10;
+	public static final int _LRD = 11;
+	public static final int _LUD = 12;
+	public static final int _RUD = 13;
+	public static final int _LRUD = 14;
+	
+	
+	public Integer[][] map = new Integer[100][100];
+	
+	public boolean blockDiscovered = false;
+	public int newBlockX = 0;
+	public int newBlockY = 0;
+	
+	public HashMap<String, player> players = new HashMap<String, player>();
+	
+	private Integer[] opt = {_L, _R, _U, _D, _LU, _LR, _LD, _RU, _RD, _UD, _LRU,  _LRD, _LUD, _RUD, _LRUD};
+	//private final Integer[] L = {_L, _LU, _LR, _LD, _LRU, _LRD, _LUD, _LRUD};
+	private static final Set<Integer> L = new HashSet<Integer>(Arrays.asList(new Integer[]  {_L, _LU, _LR, _LD, _LRU, _LRD, _LUD, _LRUD}));
+	//private final Integer[] R = {_R, _LR, _RU, _RD, _LRU, _LRD, _RUD, _LRUD};
+	private static final Set<Integer> R = new HashSet<Integer>(Arrays.asList(new Integer[] {_R, _LR, _RU, _RD, _LRU, _LRD, _RUD, _LRUD}));
+	//private final Integer[] U = {_U, _LU, _RU, _UD, _LRU, _LUD, _RUD, _LRUD};
+	private static final Set<Integer> U = new HashSet<Integer>(Arrays.asList(new Integer[] {_U, _LU, _RU, _UD, _LRU, _LUD, _RUD, _LRUD}));
+	//private final Integer[] D = {_D, _LD, _RD, _UD, _LRD, _LUD, _RUD, _LRUD};
+	private static final Set<Integer> D = new HashSet<Integer>(Arrays.asList(new Integer[] {_D, _LD, _RD, _UD, _LRD, _LUD, _RUD, _LRUD}));
+	
+	public gameWorld() {
+		map[0][0] = 8;
+	}
+	public void expandMap() {
+		
+	}
+	public void generateTile(int x, int y) {
+		ArrayList<Integer> options = new ArrayList<Integer>(Arrays.asList(opt));
+		generateTile(options, x, y);
+	}
+	public void generateTile(ArrayList<Integer> options,  int x, int y) {
+		//bounds checking
+		if(x > -1 && x < map.length && y > -1 && y < map[0].length) {
+			
+			//exceed x map size
+			if(x == 0 || !R.contains(map[x-1][y])) {
+				System.out.println("Removing L");
+				options = removeOptions("_L", options);
+			}
+			//exceed  x map size
+			if (x == map.length-1 || (!L.contains(map[x+1][y])  && map[x][y+1] != null )) {
+				System.out.println("Removing R");
+				options = removeOptions("_R", options);
+			} 
+			if (y == 0 || (!D.contains(map[x][y-1]) && map[x][y+1] != null )) {
+				System.out.println("Removing U");
+				options = removeOptions("_U", options);
+			}
+			if (y == map[0].length-1 || (!U.contains(map[x][y+1]) && map[x][y+1] != null )) {
+				System.out.println("Removing D");
+				options = removeOptions("_D", options);
+			}
+			if(options.size() == 0) {
+				return;
+			}
+			System.out.println("FINAL OPTS: " + options.toString() );
+			map[x][y] = options.get(randomizer.getRandomInt(0, options.size()));
+			blockDiscovered = true;
+			newBlockX = x;
+			newBlockY = y;
+		}			
+	}
+	public Boolean move(String playerKey, String coords) {
+		player playee = players.get(playerKey);
+		System.out.println("POSX: " + playee.posX + " POSY: " + playee.posY + " " + map[playee.posX][playee.posY]);
+		if(coords.charAt(0) == 'L') {
+			//check for oob
+			if(playee.posX == 0) {
+				return false;
+			}
+			//check if current room allows moving left
+			if(!L.contains(map[playee.posX][playee.posY])) {
+				return false;
+			}
+			//check if left tile is generated, if not, generate
+			if(map[playee.posX-1][playee.posY] == null) {
+				generateTile(new ArrayList(L),playee.posX-1, playee.posY);
+				playee.posX -= 1;
+				return true;
+			}
+		}
+		if(coords.charAt(0) == 'R') {
+			//check for oob
+			if(playee.posX == map.length-1) {
+				return false;
+			}			
+			//check if current room allows moving right
+			if(!R.contains(map[playee.posX][playee.posY])) {
+				return false;
+			}			
+			//check if left tile is generated, if not, generate
+			if(map[playee.posX+1][playee.posY] == null) {
+				generateTile(new ArrayList(R), playee.posX+1, playee.posY);
+				playee.posX += 1;
+				return true;
+			}			
+		}
+		if(coords.charAt(0) == 'U') {
+			//check for upperbound
+			if(playee.posY == 0) {
+				return false;
+			}			
+			//check if current room allows moving up
+			if(!U.contains(map[playee.posX][playee.posY])) {
+				return false;
+			}	
+			//check if upper tile is generated, if not, generate
+			if(map[playee.posX][playee.posY-1] == null) {
+				generateTile(new ArrayList(U), playee.posX, playee.posY-1);
+				playee.posY -= 1;
+				return true;
+			}		
+		}
+		if(coords.charAt(0) == 'D') {
+			//check for lower
+			if(playee.posY == map[0].length-1) {
+				return false;
+			}			
+			//check if current room allows moving up
+			if(!D.contains(map[playee.posX][playee.posY])) {
+				return false;
+			}	
+			//check if upper tile is generated, if not, generate
+			if(map[playee.posX][playee.posY+1] == null) {
+				generateTile(new ArrayList(D), playee.posX, playee.posY+1);
+				playee.posY += 1;
+				return true;
+			}		
+		}
+		return false;
+	}
+
+	private ArrayList<Integer> removeOptions(String restriction, ArrayList<Integer> options) {
+		options.remove(Integer.valueOf(_LRUD));
+		
+		if(restriction.equals("_L")) {
+			options.remove(Integer.valueOf(_L));
+			options.remove(Integer.valueOf(_LU));
+			options.remove(Integer.valueOf(_LR));
+			options.remove(Integer.valueOf(_LD));
+			options.remove(Integer.valueOf(_LRU));
+			options.remove(Integer.valueOf(_LRD));
+			options.remove(Integer.valueOf(_LUD));			
+		} 
+		else if(restriction.equals("_R")) {
+			options.remove(Integer.valueOf(_R));
+			options.remove(Integer.valueOf(_LR));
+			options.remove(Integer.valueOf(_RU));
+			options.remove(Integer.valueOf(_RD));
+			options.remove(Integer.valueOf(_LRU));
+			options.remove(Integer.valueOf(_LRD));
+			options.remove(Integer.valueOf(_RUD));	
+			
+		} else if(restriction.equals("_U")) {
+			options.remove(Integer.valueOf(_U));
+			options.remove(Integer.valueOf(_LU));
+			options.remove(Integer.valueOf(_RU));
+			options.remove(Integer.valueOf(_UD));
+			options.remove(Integer.valueOf(_LRU));
+			options.remove(Integer.valueOf(_LUD));
+			options.remove(Integer.valueOf(_RUD));				
+		}
+		else if(restriction.equals("_D")) {
+			options.remove(Integer.valueOf(_D));
+			options.remove(Integer.valueOf(_LD));
+			options.remove(Integer.valueOf(_RD));
+			options.remove(Integer.valueOf(_UD));
+			options.remove(Integer.valueOf(_LRD));
+			options.remove(Integer.valueOf(_LUD));
+			options.remove(Integer.valueOf(_RUD));				
+		}
+		
+		return options;
+	}
+}

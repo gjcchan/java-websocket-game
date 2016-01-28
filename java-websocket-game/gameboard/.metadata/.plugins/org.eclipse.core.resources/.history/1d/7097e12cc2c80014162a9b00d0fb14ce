@@ -1,0 +1,74 @@
+package core;
+
+import objects.client;
+import JSON.JSONObject;
+import data.global;
+
+public class netParser implements Runnable {
+	private global worldData;
+	private boolean terminated;
+	
+	public netParser(global data) {
+		worldData = data;
+	}
+	public synchronized void run() {
+		terminated = false;
+		String data;
+		int key;
+		String ip;
+		while(!terminated) {		
+			try {
+				synchronized(worldData.clientInput) {
+					worldData.clientInput.wait();
+					data = worldData.clientInput.get(0);
+					worldData.clientInput.remove(0);
+				}
+				//JOSN reference http://stackoverflow.com/questions/2591098/how-to-parse-json-in-java
+				JSONObject obj = new JSONObject(data.substring(data.indexOf("==")+2));
+				ip = data.substring(1, data.indexOf("=="));
+				key = obj.getInt("key");
+				if(worldData.player.containsKey(ip) == false) {
+					worldData.player.put(ip, new client());
+					worldData.player.get(ip).x = 0;
+					worldData.player.get(ip).y = 0;
+				} else {
+					switch(key) {
+					case javascript.definitions.keydown:
+						break;
+					case javascript.definitions.keyright:
+						worldData.player.get(ip).rotationX += 0.05;
+						if(worldData.player.get(ip).rotationX > Math.PI){
+							worldData.player.get(ip).rotationX -= 2*Math.PI;
+						}
+						break;
+					case javascript.definitions.keyleft:
+						worldData.player.get(ip).rotationX -= 0.05;
+						if(worldData.player.get(ip).rotationX < 0) {
+							worldData.player.get(ip).rotationX = 2*Math.PI - worldData.player.get(ip).rotationX;
+						}
+						break;
+					case javascript.definitions.keyup:
+						double deltaX = Math.sin(worldData.player.get(ip).rotationX) * client.movespeed;
+						deltaX = Math.round(deltaX);
+						double deltaZ = Math.cos(worldData.player.get(ip).rotationX) * client.movespeed;
+						deltaZ = Math.round(deltaZ);
+						worldData.player.get(ip).x += deltaX;
+						worldData.player.get(ip).z += deltaZ;
+						break;
+					default:
+					}
+				}
+			} catch (InterruptedException e) {
+				halt();
+			}
+		}
+	}
+		
+	public void halt() {
+		terminated = true;
+	}
+	
+	protected void processInput() {
+		
+	}
+}

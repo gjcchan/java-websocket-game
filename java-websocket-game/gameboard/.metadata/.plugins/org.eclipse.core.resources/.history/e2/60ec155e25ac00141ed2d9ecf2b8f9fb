@@ -1,0 +1,17 @@
+package network.extensions;
+/* 
+ * Base64 Encoder sourced from http://en.wikibooks.org/wiki/Algorithm_Implementation/Miscellaneous/Base64#Java
+ * FALL BACK FUNCTION FOR >JAVA 1.5
+ */
+class Base64Encode {
+    private final static String base64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+ 
+    public static String encode(byte[] s) {
+    	String output = "";
+    	for(int x = 0; x < s.length; x+=3) {
+    		
+    	}
+    	
+		return null;
+    }
+}

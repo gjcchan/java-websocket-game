@@ -1,0 +1,67 @@
+package network;
+
+import java.io.BufferedReader;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.Socket;
+import java.net.SocketException;
+
+import network.extensions.WebSocket;
+
+public class connectedTCP implements Runnable {
+
+	private Socket connection;
+	private InputStream persistentInputStream;
+	private BufferedReader streamReader;
+	private DataOutputStream persistentOutputStream;
+	private boolean terminated;
+	private String message;
+	byte[] buffer = new byte[65535];
+	
+	public connectedTCP(Socket newConnection)
+	{
+		connection = newConnection;
+		//setup parameters
+		
+		//connection.setSoTimeout(timeout);
+		try {
+			connection.setTcpNoDelay(true);
+		} catch (SocketException e1) {
+			e1.printStackTrace();
+		}
+		
+		terminated = true;
+		try {
+			persistentInputStream = connection.getInputStream();
+			streamReader = new BufferedReader(new InputStreamReader(this.persistentInputStream));
+			persistentOutputStream = new DataOutputStream(connection.getOutputStream());
+			//be sure to use flush()!
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+	
+	public void run() {
+		terminated = false;
+		/*try {
+			persistentOutputStream.write(WebSocket.createPackets("Hello!".getBytes()));
+			persistentOutputStream.flush();
+		} catch (IOException e1) {
+			e1.printStackTrace();
+		} */
+		while(!terminated) {	
+			try {
+				System.out.println(WebSocket.getJSON(persistentInputStream));
+			} catch (IOException e) {
+				e.printStackTrace();
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+			
+		}		
+	}
+	
+
+}

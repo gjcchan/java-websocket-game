@@ -1,0 +1,171 @@
+package network.extensions;
+
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Random;
+
+
+//Java 1.8 specific made have to do it manually
+//import java.util.Base64;
+import network.extensions.Base64Encode;
+
+public class WebSocket {
+	public static final String magicStr = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+	
+	public static String generateHash(String hash) {
+		
+		hash += magicStr;
+		byte[] output = SHA(hash.getBytes(StandardCharsets.UTF_8));
+		return Base64Encode.encode(output);
+	}
+	
+	public static String generateReturnHeader(String msg) {
+		String returnMsg;
+		returnMsg = "HTTP/1.1 101 Switching Protocols\n"
+				+"Upgrade: Websocket\n"
+				+"Connection: Upgrade\n"
+				+"Sec-WebSocket-Accept: "
+				+ generateHash(msg.substring(msg.indexOf("Sec-WebSocket-Key: ")+19,msg.indexOf("Sec-WebSocket-Key: ")+43))
+				+ "\r\n\r\n";		
+		return returnMsg;
+	}
+	//first byte is FIN flag
+	public static byte[] readPacket(InputStream dataStream) throws Exception {
+		byte[] buffer = new byte[1024]; 
+		dataStream.read(buffer, 0, 2);
+		int FIN = buffer[0] & 0x01;
+		int RSV1 = buffer[0] & 0x02;
+		int RSV2 = buffer[0] & 0x04;
+		int RSV3 = buffer[0] & 0x08;
+		int opCode = buffer[0] & 0x3F;
+		int maskFlag = buffer[1] & 0x01;
+		int length = buffer[1] & 0xFE >> 1;
+		byte[] maskKey = new byte[4];
+			
+		if(length == 126) {
+			dataStream.read(buffer, 0, 2);
+			length = buffer[0] & 0xFF + (buffer[1] & 0xFF) << 8;
+		}
+		else if(length == 127) {
+			dataStream.read(buffer, 0, 8);
+			length =  (buffer[0] & 0xFF)
+					| (buffer[1] & 0xFF) << 8 
+					| (buffer[2] & 0xFF) << 16 
+					| (buffer[3] & 0xFF) << 24 
+					| (buffer[4] & 0xFF) << 32 
+					| (buffer[5] & 0xFF) << 40 
+					| (buffer[6] & 0xFF) << 48
+					| (buffer[7] & 0xFF) << 56; 
+		}		
+		
+		if(maskFlag > 0) {
+			dataStream.read(maskKey, 0, 4);
+			/*maskKey =  (buffer[0] & 0xFF)
+					| (buffer[1] & 0xFF) << 8 
+					| (buffer[2] & 0xFF) << 16 
+					| (buffer[3] & 0xFF) << 24 
+					| (buffer[4] & 0xFF) << 32;*/
+		}
+		System.out.println("length: " + length + " FIN: " + FIN + " maskKey: " + maskKey);
+		buffer = new byte[length+1];
+		buffer[0] = (byte) FIN;
+		dataStream.read(buffer,1, length);
+		
+		for(int i = 0; i < length; i++) {
+			if(buffer[i] == -1) {
+				break;
+			}
+			//unmasking alg: data[i] = data[i] XOR mask[i MOD 4] 
+			buffer[i+1] = (byte) (buffer[i+1] ^ maskKey[i % 4]);
+		}
+		return buffer;
+	}
+	
+	public static byte[] createPacket(byte[] payload) {
+		return createPacket(payload, (byte) 0x01 , false);
+	}
+	
+	//works under constraint of under byte[] max size
+	public static byte[] createPacket(byte[] payload, byte opCode, boolean mask) {
+		int outputSize = 2 + payload.length; // opcode + mask + initial size + actual payload
+		byte lengthHeader = (byte) (mask ? 1 : 0);
+		byte[] length ;
+		byte[] output;	
+		if(mask) {
+			outputSize += 4;
+		}
+		if(payload.length > 65535) {
+			lengthHeader = (byte) (lengthHeader | (127 << 1));
+			outputSize += 8;
+			length = new byte[8];
+			
+		} else if(payload.length > 127) {
+			lengthHeader = (byte) (lengthHeader | (126 << 1));
+			length = new byte[2];
+		} else {
+			lengthHeader = (byte) (lengthHeader | (payload.length << 1));
+			length = new byte[0];
+		}
+		
+		output = new byte[outputSize];
+		output[0] = opCode;
+		output[1] = lengthHeader;
+		
+		for(int i = 0; i < length.length; i++) {
+			output[i+2] = (byte) ((payload.length >>> i*8) & 0xFF);
+		}
+		if(mask) {
+			//java signed 32bit int limitation
+			int maskKey = new Random(2147483647).nextInt();
+			for(int i = 0; i < 4; i++) {
+				output[i+2+length.length] = (byte) ((payload.length >>> i*8) & 0xFF);
+			}
+		}
+		for(int i = 0; i < payload.length; i++) {
+			int offset = 2 + length.length + (mask ? 4 : 0);
+			output[i+offset] = payload[i];
+		}
+		return output;
+	}	
+	public static String getJSON(InputStream dataStream) throws Exception {
+		String message = "";
+		byte[] output;
+		boolean eof = false;
+		while(!eof) {
+			output = readPacket(dataStream);
+			if(output.length == 0) {
+				break;
+			}
+			eof = output[0] == 1;
+			//need to strip out FIN flag
+			message += (new String(output, "ASCII")).substring(1);
+		}		
+		return message;
+	}
+	
+	//SHA-1 generator
+	public static byte[] SHA(byte[] key) {
+		MessageDigest md = null;
+	    try {
+	        md = MessageDigest.getInstance("SHA1");
+	    }
+	    catch(NoSuchAlgorithmException e) {
+	        e.printStackTrace();
+	    } 
+	    return md.digest(key);
+	}
+	
+   public static String bytesToHex(byte[] b) {
+	      char hexDigit[] = {'0', '1', '2', '3', '4', '5', '6', '7',
+	                         '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
+	      StringBuffer buf = new StringBuffer();
+	      for (int j=0; j<b.length; j++) {
+	         buf.append(hexDigit[(b[j] >> 4) & 0x0f]);
+	         buf.append(hexDigit[b[j] & 0x0f]);
+	      }
+	      return buf.toString();
+   }
+	
+}

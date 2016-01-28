@@ -1,0 +1,226 @@
+package network.extensions;
+
+import java.io.DataOutputStream;
+import java.io.InputStream;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Random;
+
+
+
+
+//Java 1.8 specific made have to do it manually
+//import java.util.Base64;
+import network.extensions.Base64Encode;
+
+public class WebSocket {
+	
+	private Socket connection;
+	private InputStream persistentInputStream;
+	private DataOutputStream persistentOutputStream;
+	private ServerSocket listener;
+	private int port;
+
+	public WebSocket(int port) throws IOException{
+		port = port;
+		listener =  new ServerSocket(port);
+		listener.setReuseAddress(true);		
+	}
+	/***
+	 * 
+	 * KEEP NOTE: LSB becomes MSB in Java interpretation!
+	 * Left to right is consistent with diagrams on the web (first byte is MSB)
+	 */
+	public static final String magicStr = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+	//OpCode definitions
+	public static final int _CLOSEOPCODE = 0x08;
+	
+	public static final byte[] _CLOSEBYTE = "OPCLOSED".getBytes();
+	public static final String _CLOSESTR = "OPCLOSED";
+	
+	public static String generateHash(String hash) {	
+		hash += magicStr;
+		byte[] output = SHA(hash.getBytes(StandardCharsets.UTF_8));
+		return Base64Encode.encode(output);
+	}
+	
+	public static String generateReturnHeader(String msg) {
+		String returnMsg;
+		returnMsg = "HTTP/1.1 101 Switching Protocols\n"
+				  + "Upgrade: Websocket\n"
+				  + "Connection: Upgrade\n"
+				  + "Sec-WebSocket-Accept: "
+				  + generateHash(msg.substring(msg.indexOf("Sec-WebSocket-Key: ")+19,msg.indexOf("Sec-WebSocket-Key: ")+43))
+				  + "\r\n\r\n";		
+		return returnMsg;
+	}
+	
+	// for some freak reason ws occasionally sends blank packets (6 byte header, and thats it)
+	public static byte[] readPacket(InputStream dataStream) throws Exception {
+		byte[] buffer = new byte[8]; 
+		byte[] maskKey = new byte[4];
+		
+		dataStream.read(buffer, 0, 2);
+		int FIN =  (buffer[0] & 0x80) >>> 7;
+		int RSV1 = (buffer[0] & 0x40) >>> 6;
+		int RSV2 = (buffer[0] & 0x20) >>> 5;
+		int RSV3 = (buffer[0] & 0x10) >>> 4;
+		int opCode = buffer[0] & 0x0F;
+		
+		//connection close opcode
+		if(opCode == _CLOSEOPCODE) {
+			return _CLOSEBYTE;
+		}
+			
+		boolean maskFlag = (buffer[1] & 0x80) >>> 7 == 1;
+		//Length < 126
+		int length = buffer[1] & 0x7F;
+		
+		//Length <65535
+		if(length == 126) {
+			dataStream.read(buffer, 0, 2);
+			length =  (buffer[0] & 0xFF) << 8
+					| (buffer[1] & 0xFF);
+		}
+		/* 
+		 * length max (2^31-1 or 2147483647, as Java has issues with unsigned 32bit long long)
+		 * Which really doesn't matter since Java limits byte[] to 2^31-1 objects
+		 */
+		else if(length == 127) {
+			dataStream.read(buffer, 0, 8);
+			length =  (buffer[0] & 0xFF) << 56
+					| (buffer[1] & 0xFF) << 48 
+					| (buffer[2] & 0xFF) << 40 
+					| (buffer[3] & 0xFF) << 32 
+					| (buffer[4] & 0xFF) << 24 
+					| (buffer[5] & 0xFF) << 16 
+					| (buffer[6] & 0xFF) << 8
+					| (buffer[7] & 0xFF); 
+		}
+		
+		if(maskFlag) {
+			dataStream.read(maskKey, 0, 4);
+		}
+		//System.out.println("length: " + length + " FIN: " + FIN + " maskKey: ");
+		buffer = new byte[length+1];
+		buffer[0] = (byte) FIN;
+		dataStream.read(buffer,1, length);
+		
+		if(maskFlag) {
+			for(int i = 0; i < length; i++) {
+				if(buffer[i] == -1) {
+					break;
+				}
+				buffer[i+1] = (byte) (buffer[i+1] ^ maskKey[i % 4]);
+			}
+		}
+		
+		return buffer;
+	}
+	
+	public static byte[] createPacket(byte[] payload) {
+		return createPacket(payload, (byte) 0x81 , false);
+	}
+	
+	//works under constraint of under byte[] max size
+	/*************
+	 * Regarding OpCode:
+	 * Other than MSB is 1, you can do whatever with the OpCode, use the header to save bandwidth like REST
+	 * 
+	 */
+	public static byte[] createPacket(byte[] payload, byte opCode, boolean mask) {
+		int outputSize = 2 + payload.length; // opcode + mask + initial size + actual payload
+		byte lengthHeader = (byte) (mask ? 0x80 : 0);
+		byte[] length;
+		byte[] output;	
+		
+		if(mask) {
+			outputSize += 4;
+		}
+		
+		if(payload.length > 65535) {
+			lengthHeader = (byte) (lengthHeader | 0x7F);
+			outputSize += 8;
+			length = new byte[8];
+			
+		} else if(payload.length > 125) {
+			lengthHeader = (byte) (lengthHeader | 0x7E);
+			length = new byte[2];
+		} else {
+			lengthHeader = (byte) (lengthHeader | payload.length);
+			length = new byte[0];
+		}
+		outputSize += length.length;
+		output = new byte[outputSize];
+		output[0] = opCode;
+		output[1] = lengthHeader;
+		
+		//build length header
+		for(int i = 0; i < length.length; i++) {
+			output[i+2] = (byte) ((payload.length >>> (length.length-1-i)*8) & 0xFF);
+		}
+
+		//build mask header
+		if(mask) {
+			//java signed 32bit int limitation
+			int maskKey = new Random(Integer.MAX_VALUE).nextInt();
+			for(int i = 0; i < 4; i++) {
+				output[i+2+length.length] = (byte) ((payload.length >>> (3-i)*8) & 0xFF);
+			}
+		}
+		// write data to packet
+		int offset = 2 + length.length + (mask ? 4 : 0);
+		for(int i = 0; i < payload.length; i++) {		
+			output[i+offset] = payload[i];
+		}
+		return output;
+	}	
+	
+	public static String getJSON(InputStream dataStream) throws Exception {
+		String message = "";
+		String parsed = "";
+		byte[] output;
+		boolean eof = false;
+		while(!eof) {
+			output = readPacket(dataStream);
+			parsed = new String(output, "UTF-8");
+			if(output.length == 0) {
+				break;
+			} 
+			if (parsed.equals(_CLOSESTR)) {
+				return parsed;
+			}
+			eof = output[0] == 1;
+			//need to strip out FIN flag
+			message += parsed.substring(1);
+		}		
+		return message;
+	}
+	
+	//SHA-1 generator
+	public static byte[] SHA(byte[] key) {
+		MessageDigest md = null;
+	    try {
+	        md = MessageDigest.getInstance("SHA1");
+	    }
+	    catch(NoSuchAlgorithmException e) {
+	        e.printStackTrace();
+	    } 
+	    return md.digest(key);
+	}
+	
+   public static String bytesToHex(byte[] b) {
+	      char hexDigit[] = {'0', '1', '2', '3', '4', '5', '6', '7',
+	                         '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
+	      StringBuffer buf = new StringBuffer();
+	      for (int j=0; j<b.length; j++) {
+	         buf.append(hexDigit[(b[j] >> 4) & 0x0f]);
+	         buf.append(hexDigit[b[j] & 0x0f]);
+	      }
+	      return buf.toString();
+   }
+	
+}

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<script src="js/pixi.min.js"></script>
+	</head>
+<body>
+	<script>
+	    // create an new instance of a pixi stage
+	    var stage = new PIXI.Stage(0x66FF99);
+	    var renderer = PIXI.autoDetectRenderer(window.innerWidth, window.innerHeight);
+	 	loadSprites();
+	    // add the renderer view element to the DOM
+	    document.body.appendChild(renderer.view);
+	 
+	    requestAnimFrame( animate );
+	 
+	    function animate() {
+	        requestAnimFrame( animate );
+	        // render the stage   
+	        renderer.render(stage);
+	    }	
+
+	    function loadSprites() {
+	    	var texture = new Array();
+	    	texture.push(PIXI.Texture.fromImage("gameTiles/L.png"));
+	    	texture.push(PIXI.Texture.fromImage("gameTiles/R.png"));
+	    	texture.push(PIXI.Texture.fromImage("gameTiles/U.png"));
+	    	texture.push(PIXI.Texture.fromImage("gameTiles/D.png"));
+
+	    	texture.push(PIXI.Texture.fromImage("gameTiles/LU.png"));
+	    	texture.push(PIXI.Texture.fromImage("gameTiles/LR.png"));
+	    	texture.push(PIXI.Texture.fromImage("gameTiles/LD.png"));
+	    	texture.push(PIXI.Texture.fromImage("gameTiles/RU.png"));
+	    	texture.push(PIXI.Texture.fromImage("gameTiles/RD.png"));	
+
+	    	texture.push(PIXI.Texture.fromImage("gameTiles/UD.png"))  
+
+	    	texture.push(PIXI.Texture.fromImage("gameTiles/LRU.png"));
+	    	texture.push(PIXI.Texture.fromImage("gameTiles/LRD.png"));
+	    	texture.push(PIXI.Texture.fromImage("gameTiles/LUD.png"));
+	    	texture.push(PIXI.Texture.fromImage("gameTiles/RUD.png"));	
+
+
+	    	texture.push(PIXI.Texture.fromImage("gameTiles/LRUD.png"));
+
+	    		    	  	
+	    }
+    </script>
+</body>
+
+</html>
